@@ -50,8 +50,16 @@
   }
 }
 
+* {
+  box-sizing: border-box;
+}
+
+html,
 body {
+  height: 100%;
   margin: 0;
+  overflow-x: hidden;
+  overflow-y: visible;
 }
 
 h1,
@@ -292,5 +300,29 @@ code {
   &::after {
     right: 0;
     border-right-color: var(--border);
+  }
+}
+
+.install-btn {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  padding: 6px 18px;
+  border-radius: 20px;
+  border: none;
+  background: #863bff;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  box-shadow: 0 2px 12px rgba(134, 59, 255, 0.5);
+  transition: background 0.15s, box-shadow 0.15s;
+
+  &:hover {
+    background: #9d5eff;
+    box-shadow: 0 4px 16px rgba(134, 59, 255, 0.7);
   }
 }
