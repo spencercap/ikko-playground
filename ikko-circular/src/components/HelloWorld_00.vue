@@ -15,7 +15,7 @@ const count = ref(0)
       <img :src="viteLogo" class="vite" alt="Vite logo" />
     </div>
     <div>
-      <h1>bewm</h1>
+      <h1>Get started</h1>
       <p>Edit <code>src/App.vue</code> and save to test <code>HMR</code></p>
     </div>
     <button type="button" class="counter" @click="count++">
@@ -25,7 +25,7 @@ const count = ref(0)
 
   <div class="ticks"></div>
 
-  <!-- <section id="next-steps">
+  <section id="next-steps">
     <div id="docs">
       <svg class="icon" role="presentation" aria-hidden="true">
         <use href="/icons.svg#documentation-icon"></use>
@@ -88,7 +88,7 @@ const count = ref(0)
         </li>
       </ul>
     </div>
-  </section> -->
+  </section>
 
   <div class="ticks"></div>
   <section id="spacer"></section>
