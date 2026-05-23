@@ -6,9 +6,7 @@ import { usePwaInstall } from './composables/usePwaInstall'
 const { installPrompt, install } = usePwaInstall()
 
 onMounted(() => {
-  screen.orientation?.lock('portrait').catch(() => {
-    // Silently ignore — lock only works in fullscreen PWA context
-  })
+  ;(screen.orientation as any)?.lock('portrait').catch(() => {})
 })
 </script>
 
