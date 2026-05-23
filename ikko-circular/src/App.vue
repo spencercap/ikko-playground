@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import Spinner from './components/Spinner.vue'
+import Spinner from './components/spinner/Spinner.vue'
 import { usePwaInstall } from './composables/usePwaInstall'
 
 const { installPrompt, install } = usePwaInstall()
