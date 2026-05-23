@@ -4,11 +4,16 @@ import { onMounted, onUnmounted, reactive, ref } from 'vue'
 const containerRef = ref<HTMLElement | null>(null)
 
 const pointer = reactive({ angle: 0, active: false })
-const accel   = reactive({ x: 0, y: 0, z: 9.8 })
+const orient  = reactive({ gamma: 0, beta: 90 })       // degrees
+const accel   = reactive({ x: 0, y: 0, z: 9.8 })       // m/s²
 
+// Each layer: source drives angle, different radius/colour per data source
 const layers = [
-  { angle: 0,       smoothAngle: 0,       trackSpeed: 6.0, radius: 0.30, size: 16, color: '#aaff00', shadow: 'rgba(170,255,0,0.7)'  },
-  { angle: Math.PI, smoothAngle: Math.PI, trackSpeed: 3.5, radius: 0.17, size: 10, color: '#00cfff', shadow: 'rgba(0,207,255,0.7)'  },
+  { angle: 0,       smoothAngle: 0,       trackSpeed: 6.0, radius: 0.35, size: 14, color: '#aaff00', shadow: 'rgba(170,255,0,0.7)',   source: 'pointer' },
+  { angle: Math.PI, smoothAngle: Math.PI, trackSpeed: 3.5, radius: 0.20, size: 10, color: '#00cfff', shadow: 'rgba(0,207,255,0.7)',   source: 'orient'  },
+  { angle: 0,       smoothAngle: 0,       trackSpeed: 8.0, radius: 0.62, size:  9, color: '#ff3344', shadow: 'rgba(255,51,68,0.7)',   source: 'accelX'  },
+  { angle: 0,       smoothAngle: 0,       trackSpeed: 8.0, radius: 0.73, size:  9, color: '#44ff66', shadow: 'rgba(68,255,102,0.7)',  source: 'accelY'  },
+  { angle: 0,       smoothAngle: 0,       trackSpeed: 8.0, radius: 0.85, size:  9, color: '#6677ff', shadow: 'rgba(102,119,255,0.7)', source: 'accelZ'  },
 ]
 
 const positions = reactive(layers.map(() => ({ x: 0, y: 0 })))
@@ -35,14 +40,17 @@ function onPointerMove(e: PointerEvent) {
 function updateAngle(e: PointerEvent) {
   if (!containerRef.value) return
   const rect = containerRef.value.getBoundingClientRect()
-  const cx = rect.left + rect.width  / 2
-  const cy = rect.top  + rect.height / 2
-  pointer.angle = Math.atan2(e.clientY - cy, e.clientX - cx)
+  pointer.angle = Math.atan2(e.clientY - (rect.top + rect.height / 2), e.clientX - (rect.left + rect.width / 2))
 }
 
 function onPointerEnd(e: PointerEvent) {
   containerRef.value?.releasePointerCapture(e.pointerId)
   pointer.active = false
+}
+
+function onDeviceOrientation(e: DeviceOrientationEvent) {
+  orient.gamma = e.gamma ?? 0
+  orient.beta  = e.beta  ?? 90
 }
 
 function onDeviceMotion(e: DeviceMotionEvent) {
@@ -57,24 +65,36 @@ function loop(time: number) {
   const dt = Math.min((time - lastTime) / 1000, 0.05)
   lastTime = time
 
+  const tiltMag = Math.hypot(orient.gamma, orient.beta - 90)
+
   layers.forEach((layer, i) => {
-    if (i === 0) {
-      // Layer 0 — finger/pointer position
-      if (pointer.active) layer.angle = pointer.angle
-    } else {
-      // Layer 1 — accelerometer tilt angle (x/y plane)
-      // atan2(x, -y) so that tilting forward moves the dot upward
-      layer.angle = Math.atan2(accel.x, -accel.y)
+    switch (layer.source) {
+      case 'pointer':
+        if (pointer.active) layer.angle = pointer.angle
+        break
+      case 'orient':
+        // atan2(beta−90, gamma): 1:1 tilt-direction → circle position
+        layer.angle = Math.atan2(orient.beta - 90, orient.gamma)
+        break
+      case 'accelX':
+        // map ±9.8 m/s² → ±π (sweeps a semicircle per axis)
+        layer.angle = (accel.x / 9.8) * Math.PI
+        break
+      case 'accelY':
+        layer.angle = (accel.y / 9.8) * Math.PI
+        break
+      case 'accelZ':
+        layer.angle = (accel.z / 9.8) * Math.PI
+        break
     }
 
-    // Smooth shortest-path lerp — never takes the long way around 0/360
+    // Smooth shortest-path lerp
     const diff = layer.angle - layer.smoothAngle
     layer.smoothAngle += Math.atan2(Math.sin(diff), Math.cos(diff)) * layer.trackSpeed * dt
 
-    // Layer 1 radius expands with tilt magnitude
-    const tiltMag = Math.sqrt(accel.x ** 2 + accel.y ** 2)
-    const r = i === 1
-      ? (layer.radius + Math.min(tiltMag / 10, 0.12)) * half
+    // Orient dot radius expands with tilt magnitude
+    const r = layer.source === 'orient'
+      ? (layer.radius + Math.min(tiltMag / 90, 1) * 0.08) * half
       : layer.radius * half
 
     positions[i].x = Math.cos(layer.smoothAngle) * r
@@ -91,8 +111,9 @@ onMounted(() => {
   el.addEventListener('pointermove',   onPointerMove)
   el.addEventListener('pointerup',     onPointerEnd)
   el.addEventListener('pointercancel', onPointerEnd)
-  window.addEventListener('devicemotion', onDeviceMotion as EventListener)
-  window.addEventListener('resize',       updateSize)
+  window.addEventListener('deviceorientation', onDeviceOrientation as EventListener)
+  window.addEventListener('devicemotion',      onDeviceMotion      as EventListener)
+  window.addEventListener('resize',            updateSize)
   lastTime = performance.now()
   raf = requestAnimationFrame(loop)
 })
@@ -104,30 +125,29 @@ onUnmounted(() => {
   el?.removeEventListener('pointermove',   onPointerMove)
   el?.removeEventListener('pointerup',     onPointerEnd)
   el?.removeEventListener('pointercancel', onPointerEnd)
-  window.removeEventListener('devicemotion', onDeviceMotion as EventListener)
-  window.removeEventListener('resize',       updateSize)
+  window.removeEventListener('deviceorientation', onDeviceOrientation as EventListener)
+  window.removeEventListener('devicemotion',      onDeviceMotion      as EventListener)
+  window.removeEventListener('resize',            updateSize)
 })
 </script>
 
 <template>
-  <!-- Wrapper holds both the spinning ring and the orbit overlay at the same size -->
   <div class="spinner-wrap" ref="containerRef">
     <div class="spinner">
       <div class="spinner-inner"></div>
     </div>
 
-    <!-- Separate layer — NOT a child of .spinner, so it never inherits the spin rotation -->
     <div class="orbit-layer">
       <div
         v-for="(pos, i) in positions"
         :key="i"
         class="orbit-dot"
         :style="{
-          width:     `${layers[i].size}px`,
-          height:    `${layers[i].size}px`,
-          background: layers[i].color,
-          boxShadow: `0 0 10px 3px ${layers[i].shadow}`,
-          transform: `translate(calc(-50% + ${pos.x}px), calc(-50% + ${pos.y}px))`,
+          width:      `${layers[i].size}px`,
+          height:     `${layers[i].size}px`,
+          background:  layers[i].color,
+          boxShadow:  `0 0 10px 3px ${layers[i].shadow}`,
+          transform:  `translate(calc(-50% + ${pos.x}px), calc(-50% + ${pos.y}px))`,
         }"
       />
     </div>
