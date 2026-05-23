@@ -21,16 +21,29 @@ function updateSize() {
   if (containerRef.value) half = containerRef.value.offsetWidth / 2
 }
 
+function onPointerDown(e: PointerEvent) {
+  containerRef.value?.setPointerCapture(e.pointerId)
+  pointer.active = true
+  updateAngle(e)
+}
+
 function onPointerMove(e: PointerEvent) {
+  if (!pointer.active) return
+  updateAngle(e)
+}
+
+function updateAngle(e: PointerEvent) {
   if (!containerRef.value) return
   const rect = containerRef.value.getBoundingClientRect()
   const cx = rect.left + rect.width  / 2
   const cy = rect.top  + rect.height / 2
-  pointer.angle  = Math.atan2(e.clientY - cy, e.clientX - cx)
-  pointer.active = true
+  pointer.angle = Math.atan2(e.clientY - cy, e.clientX - cx)
 }
 
-function onPointerEnd() { pointer.active = false }
+function onPointerEnd(e: PointerEvent) {
+  containerRef.value?.releasePointerCapture(e.pointerId)
+  pointer.active = false
+}
 
 function onDeviceMotion(e: DeviceMotionEvent) {
   const a = e.accelerationIncludingGravity
@@ -45,25 +58,27 @@ function loop(time: number) {
   lastTime = time
 
   layers.forEach((layer, i) => {
-    // Only advance the target when pointer is active
-    if (pointer.active) {
-      layer.angle = pointer.angle
+    if (i === 0) {
+      // Layer 0 — finger/pointer position
+      if (pointer.active) layer.angle = pointer.angle
+    } else {
+      // Layer 1 — accelerometer tilt angle (x/y plane)
+      // atan2(x, -y) so that tilting forward moves the dot upward
+      layer.angle = Math.atan2(accel.x, -accel.y)
     }
 
     // Smooth shortest-path lerp — never takes the long way around 0/360
     const diff = layer.angle - layer.smoothAngle
     layer.smoothAngle += Math.atan2(Math.sin(diff), Math.cos(diff)) * layer.trackSpeed * dt
 
-    // Accel: x tilts angle, z bumps radius, y drags vertically
-    const angleOffset  = (accel.x / 10) * (i === 0 ?  1.0 : -0.7)
-    const radiusBump   = (Math.abs(accel.z) / 10) * 0.06
-    const verticalDrag = (accel.y / 10) * half * 0.12
+    // Layer 1 radius expands with tilt magnitude
+    const tiltMag = Math.sqrt(accel.x ** 2 + accel.y ** 2)
+    const r = i === 1
+      ? (layer.radius + Math.min(tiltMag / 10, 0.12)) * half
+      : layer.radius * half
 
-    const r = (layer.radius + radiusBump) * half
-    const a = layer.smoothAngle + angleOffset
-
-    positions[i].x = Math.cos(a) * r
-    positions[i].y = Math.sin(a) * r + verticalDrag
+    positions[i].x = Math.cos(layer.smoothAngle) * r
+    positions[i].y = Math.sin(layer.smoothAngle) * r
   })
 
   raf = requestAnimationFrame(loop)
@@ -71,24 +86,26 @@ function loop(time: number) {
 
 onMounted(() => {
   updateSize()
-  window.addEventListener('pointermove',   onPointerMove)
-  window.addEventListener('pointerup',     onPointerEnd)
-  window.addEventListener('pointercancel', onPointerEnd)
-  window.addEventListener('pointerleave',  onPointerEnd)
-  window.addEventListener('devicemotion',  onDeviceMotion as EventListener)
-  window.addEventListener('resize',        updateSize)
+  const el = containerRef.value!
+  el.addEventListener('pointerdown',   onPointerDown)
+  el.addEventListener('pointermove',   onPointerMove)
+  el.addEventListener('pointerup',     onPointerEnd)
+  el.addEventListener('pointercancel', onPointerEnd)
+  window.addEventListener('devicemotion', onDeviceMotion as EventListener)
+  window.addEventListener('resize',       updateSize)
   lastTime = performance.now()
   raf = requestAnimationFrame(loop)
 })
 
 onUnmounted(() => {
   cancelAnimationFrame(raf)
-  window.removeEventListener('pointermove',   onPointerMove)
-  window.removeEventListener('pointerup',     onPointerEnd)
-  window.removeEventListener('pointercancel', onPointerEnd)
-  window.removeEventListener('pointerleave',  onPointerEnd)
-  window.removeEventListener('devicemotion',  onDeviceMotion as EventListener)
-  window.removeEventListener('resize',        updateSize)
+  const el = containerRef.value
+  el?.removeEventListener('pointerdown',   onPointerDown)
+  el?.removeEventListener('pointermove',   onPointerMove)
+  el?.removeEventListener('pointerup',     onPointerEnd)
+  el?.removeEventListener('pointercancel', onPointerEnd)
+  window.removeEventListener('devicemotion', onDeviceMotion as EventListener)
+  window.removeEventListener('resize',       updateSize)
 })
 </script>
 
@@ -122,6 +139,7 @@ onUnmounted(() => {
   position: relative;
   width: 100%;
   aspect-ratio: 1 / 1;
+  touch-action: none;
 }
 
 .spinner {
