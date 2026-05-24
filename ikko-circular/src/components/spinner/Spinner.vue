@@ -1,11 +1,16 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, reactive, ref } from 'vue'
+import { spinnerState } from '../../composables/useSpinnerState'
+import { config } from '../../composables/useSpinnerConfig'
 
 const containerRef = ref<HTMLElement | null>(null)
 
-const pointer = reactive({ angle: 0, active: false })
-const orient  = reactive({ gamma: 0, beta: 90 })       // degrees
-const accel   = reactive({ x: 0, y: 0, z: 9.8 })       // m/s²
+// Aliases into shared state so event handlers write through to DevWidget
+const pointer = spinnerState.pointer
+const orient  = spinnerState.orient
+const accel   = spinnerState.accel
+
+const inv = (flag: boolean) => flag ? -1 : 1
 
 // Each layer: source drives angle, different radius/colour per data source
 const layers = [
@@ -70,21 +75,19 @@ function loop(time: number) {
   layers.forEach((layer, i) => {
     switch (layer.source) {
       case 'pointer':
-        if (pointer.active) layer.angle = pointer.angle
+        if (pointer.active) layer.angle = pointer.angle * inv(config.invertPointer)
         break
       case 'orient':
-        // atan2(beta−90, gamma): 1:1 tilt-direction → circle position
-        layer.angle = Math.atan2(orient.beta - 90, orient.gamma)
+        layer.angle = Math.atan2(orient.beta - 90, orient.gamma) * inv(config.invertOrient)
         break
       case 'accelX':
-        // map ±9.8 m/s² → ±π (sweeps a semicircle per axis)
-        layer.angle = (accel.x / 9.8) * Math.PI
+        layer.angle = (accel.x / 9.8) * Math.PI * inv(config.invertAccelX)
         break
       case 'accelY':
-        layer.angle = (accel.y / 9.8) * Math.PI
+        layer.angle = (accel.y / 9.8) * Math.PI * inv(config.invertAccelY)
         break
       case 'accelZ':
-        layer.angle = (accel.z / 9.8) * Math.PI
+        layer.angle = (accel.z / 9.8) * Math.PI * inv(config.invertAccelZ)
         break
     }
 
